@@ -1,43 +1,81 @@
 import cv2
 import numpy as np
-import time
+import scipy.fftpack
+import timeit
 
-########
-#20210503
-#이미지를 불러와서 조명 완화, 흑백 처리까지만
-#영상 처리와 프레임 단위 리턴 구현 중
-########
-clahefilter = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(16,16))
+##2021/05/10
+##이미지 처리 방식 -> Homomorphic filter
+##이미지 처리 -> 영상 처리
+##현재 이슈: 이미지 처리 프레임당 0.4초씩 걸림 -> 안정화 필요
 
-img = cv2.imread('sample_human.png')
+def preprocessing(img):
+    # 사이즈 크롭 - 눈 비율과 머리 각도 영상 사이즈와 동기화하기
+    #img = img[:, 59:cols-20]
 
-x,y,h,w = 550,250,400,300
-# img = img[y:y+h, x:x+w]
+    # 이미지 row, col 개수 불러오기 (위에서 크롭한 기준이다)
+    rows = img.shape[0]
+    cols = img.shape[1]
 
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-grayimg = gray
+    # 로그 연산으로 바꿔주기 -> 곱 연산을 덧셈 연산으로 바꾸기 위함이다
+    imgLog = np.log1p(np.array(img, dtype="float") / 255)
 
-GLARE_MIN = np.array([0, 0, 50],np.uint8)
-GLARE_MAX = np.array([0, 0, 225],np.uint8)
+    # 시그마 값을 10으로 줘서 가우시안 분자식을 만듬
+    M = 2*rows + 1
+    N = 2*cols + 1
+    sigma = 10
+    (X,Y) = np.meshgrid(np.linspace(0,N-1,N), np.linspace(0,M-1,M))
+    centerX = np.ceil(N/2)
+    centerY = np.ceil(M/2)
+    gaussianNumerator = (X - centerX)**2 + (Y - centerY)**2
 
-hsv_img = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+    # Low pass와 High pass 필터 생성
+    Hlow = np.exp(-gaussianNumerator / (2*sigma*sigma))
+    Hhigh = 1 - Hlow
 
-frame_threshed = cv2.inRange(hsv_img, GLARE_MIN, GLARE_MAX)
-result = cv2.inpaint(img, frame_threshed, 0.1, cv2.INPAINT_TELEA)
+    #fftshift의 역연산
+    HlowShift = scipy.fftpack.ifftshift(Hlow.copy())
+    HhighShift = scipy.fftpack.ifftshift(Hhigh.copy())
 
-lab1 = cv2.cvtColor(result, cv2.COLOR_BGR2LAB)
-lab_planes1 = cv2.split(lab1)
-clahe1 = cv2.createCLAHE(clipLimit=2.0,tileGridSize=(8,8))
-lab_planes1[0] = clahe1.apply(lab_planes1[0])
-lab1 = cv2.merge(lab_planes1)
-clahe_bgr1 = cv2.cvtColor(lab1, cv2.COLOR_LAB2BGR)
+    # 필터 적용, 크롭
+    If = scipy.fftpack.fft2(imgLog.copy(), (M,N))
+    Ioutlow = np.real(scipy.fftpack.ifft2(If.copy() * HlowShift, (M,N)))
+    Iouthigh = np.real(scipy.fftpack.ifft2(If.copy() * HhighShift, (M,N)))
 
+    # 감마값을 파라미터로, 이 감마값을 조정함으로써 adaptive한 이미지를 적용할 수 있다
+    gamma1 = 0.3
+    gamma2 = 1.5
+    Iout = gamma1*Ioutlow[0:rows,0:cols] + gamma2*Iouthigh[0:rows,0:cols]
 
-# fps = 1./(time.time()-t1)
-# cv2.putText(clahe_bgr1    , "FPS: {:.2f}".format(fps), (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255))
+    # 처음에 로그값을 적용하여 곱셈 -> 덧셈 연산으로 만들어 주었는데, exp를 통해 다시 원래대로 돌려주면 된다
+    Ihmf = np.expm1(Iout)
+    Ihmf = (Ihmf - np.min(Ihmf)) / (np.max(Ihmf) - np.min(Ihmf))
+    Ihmf2 = np.array(255*Ihmf, dtype="uint8")
 
-res = cv2.cvtColor(clahe_bgr1, cv2.COLOR_BGR2GRAY)
+    return Ihmf2
 
-cv2.imshow("Originalimg", img)
-cv2.imshow("res", res)
-cv2.waitKey(0)
+if __name__ == "__main__":
+    cap = cv2.VideoCapture("./SampleVideo.mp4")
+
+    if cap.isOpened():                 # 캡쳐 객체 초기화 확인
+        while True:
+            ret, img = cap.read()      # 다음 프레임 읽기
+            if ret:                     # 프레임 읽기 정상
+                start_t = timeit.default_timer()
+
+                frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                frame = preprocessing(frame)
+
+                terminate_t = timeit.default_timer()
+                timePer = ((terminate_t - start_t))
+
+                cv2.imshow('video_file', frame) # 화면에 표시
+                print('이번 프레임: ' + str(timePer))
+                cv2.waitKey(1)            # 파라미터와 영상 속도는 반비례
+            else:                       # 다음 프레임 읽을 수 없슴,
+                break                   # 재생 완료
+    else:
+        print("can't open video.")      # 캡쳐 객체 초기화 실패
+
+    cap.release()                       # 캡쳐 자원 반납
+    cv2.destroyAllWindows()
+
