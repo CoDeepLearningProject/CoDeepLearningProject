@@ -3,7 +3,6 @@ import dlib
 import cv2
 import time
 import timeit
-import matplotlib.pyplot as plt
 
 from scipy.spatial import distance
 from imutils import face_utils
@@ -27,7 +26,6 @@ def eye_aspect_ratio(eye) :
 
 #####################################################################################################################
 
-OPEN_EAR = 0  # For init_open_ear()
 EAR_THRESH = 0  # Threashold value
 
 print("loading facial landmark predictor...")
@@ -39,20 +37,63 @@ predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
 
 print("starting video stream thread...")
-videoFile = './SampleVideo.mp4'
+# videoFile = './SampleVideo.mp4'
+videoFile = './VideoSample3.mp4'
+
 cap = cv2.VideoCapture(videoFile)
 
-#time.sleep(1.0)
+# check EAR with Open Eyes, Closed Eyes with Python thread
+def getEARTHRESHWithThread() :
+    time.sleep(2)
+    print("Init getAverageEar")
+
+    ear_list = []
+    # for _ in range(15):
+    for _ in range(10):
+        ear_list.append(average_EAR)
+        time.sleep(1)
+
+    global EAR_THRESH
+    EAR_THRESH = (sum(ear_list) / len(ear_list)) - .01
+
+    print("EAR_THRESH={:.4F}".format(EAR_THRESH))
+    print("Finish getEARWithOpenEyes")
+
+
+get_Average_ear = Thread(target=getEARTHRESHWithThread)
+get_Average_ear.daemon = True
+get_Average_ear.start()
+
 #####################################################################################################################
 import imutils
+
+
+def light_removing(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    #lab -> l 명도, a green의 보색, b blue의 보색
+    L = lab[:, :, 0]
+    med_L = cv2.medianBlur(L, 99)
+    invert_L = cv2.bitwise_not(med_L)
+    composed = cv2.addWeighted(gray, 0.75, invert_L, 0.25, 0)
+    return L, composed
+
+DROWSY_FLAG = False
+COUNTER = 0
+COUNT_THRESH = 20
 
 while(cap.isOpened()):
     ret, frame = cap.read()
     if ret:
         frame = imutils.resize(frame, width=450)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        faces = detector(gray)
+        L, gray = light_removing(frame)
+        original_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # cv2.imshow('OriginalGray', original_gray)
+        cv2.imshow('Gray', gray)
+        #cv2.imshow('L', L)
+        faces = detector(gray, 0)
 
         for face in faces:
             x1 = face.left()
@@ -75,7 +116,7 @@ while(cap.isOpened()):
             leftEAR = eye_aspect_ratio(leftEye)
             rightEAR = eye_aspect_ratio(rightEye)
 
-            ear = (leftEAR + rightEAR) / 2.0
+            average_EAR = (leftEAR + rightEAR) / 2.0
 
             leftEyeHull = cv2.convexHull(leftEye)
             rightEyeHull = cv2.convexHull(rightEye)
@@ -83,7 +124,25 @@ while(cap.isOpened()):
             cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
             cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
 
-            cv2.putText(frame, "EAR: {:.2f}".format(ear), (300, 30),
+            # print(EAR_THRESH)
+            # print(average_EAR)
+            if average_EAR < EAR_THRESH:
+                if not DROWSY_FLAG:
+                    start_drowsy_detection = timeit.default_timer()
+                    DROWSY_FLAG = True
+                COUNTER += 1
+
+                if COUNTER > COUNT_THRESH:
+                    print("drowsy...")
+                    # TODO
+                    # Implement Alarm
+
+            else:
+                DROWSY_FLAG = False
+                COUNTER = 0
+
+
+            cv2.putText(frame, "EAR: {:.2f}".format(average_EAR), (300, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         cv2.imshow('VideoFrame', frame)
