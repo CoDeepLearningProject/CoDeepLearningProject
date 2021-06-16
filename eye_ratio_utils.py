@@ -26,6 +26,7 @@ def eye_aspect_ratio(eye) :
 
 #####################################################################################################################
 
+
 EAR_THRESH = 0  # Threashold value
 
 print("loading facial landmark predictor...")
@@ -64,14 +65,14 @@ get_Average_ear = Thread(target=getEARTHRESHWithThread)
 get_Average_ear.daemon = True
 get_Average_ear.start()
 
-#####################################################################################################################
+
 import imutils
 
 
 def light_removing(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
-    #lab -> l 명도, a green의 보색, b blue의 보색
+    # lab -> l 명도, a green의 보색, b blue의 보색
     L = lab[:, :, 0]
     med_L = cv2.medianBlur(L, 99)
     invert_L = cv2.bitwise_not(med_L)
@@ -81,6 +82,13 @@ def light_removing(frame):
 DROWSY_FLAG = False
 COUNTER = 0
 COUNT_THRESH = 20
+
+import pygame
+
+def make_alarm_sound (path) :
+    pygame.mixer.init()
+    pygame.mixer.music.load(path)
+    pygame.mixer.music.play()
 
 while(cap.isOpened()):
     ret, frame = cap.read()
@@ -124,8 +132,6 @@ while(cap.isOpened()):
             cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
             cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
 
-            # print(EAR_THRESH)
-            # print(average_EAR)
             if average_EAR < EAR_THRESH:
                 if not DROWSY_FLAG:
                     start_drowsy_detection = timeit.default_timer()
@@ -136,6 +142,9 @@ while(cap.isOpened()):
                     print("drowsy...")
                     # TODO
                     # Implement Alarm
+                    t = Thread(target=make_alarm_sound, args=("./short_alarm.mp3", ))
+                    t.daemon = True
+                    t.start()
 
             else:
                 DROWSY_FLAG = False
