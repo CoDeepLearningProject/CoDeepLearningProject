@@ -1,0 +1,8 @@
+# Project
+head_detect.h5
+
+# Python
+__pycache__/
+
+# Visual Studio Code
+.vscode/
