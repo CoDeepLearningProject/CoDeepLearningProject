@@ -7,6 +7,7 @@ from alarm import ring_alarm
 from ear import calculate_ear
 # from head_pose import calculate_head_pose
 from preprocess import preprocess
+import head_pose
 
 EAR_DROWSY_FLAG = False
 EAR_DROWSY_RATIO = 0.5
@@ -53,7 +54,7 @@ if __name__ == "__main__":
         EAR_THRESH = EAR_DROWSY_RATIO * EAR_MAX + (1 - EAR_DROWSY_RATIO) * EAR_MIN
 
         # head pose 계산
-        # head_pose = calculate_head_pose(rgb, bgr)
+        headPose = head_pose.calculate_head_pose(rgb, bgr)
 
         # `ear`이 `EAR_THRESH`보다 `TIME_THRESH` 초 이상 낮으면 졸음으로 판단
         if ear < EAR_THRESH:
@@ -63,7 +64,8 @@ if __name__ == "__main__":
 
             NOW = timeit.default_timer()
             if (NOW - START) > TIME_THRESH:
-                print("...Drowsy...")
+                cv2.putText(bgr, 'EAR_Drowsiness!', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
+                #print('drowsiness...')
                 ring_alarm()
         else:
             EAR_DROWSY_FLAG = False

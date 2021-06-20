@@ -4,6 +4,7 @@ from math import cos, sin
 import cv2
 import numpy as np
 from PIL import Image
+from alarm import ring_alarm
 
 from whenet import WHENet
 from YOLO.yolo_postprocess import YOLO
@@ -46,7 +47,8 @@ def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 100):
     print()
 
     if (int(zAxis_x) - int(zAxis_y)) < 15: #임계값
-        cv2.putText(img, 'Drowsiness!', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,255), 3, cv2.LINE_AA)
+        cv2.putText(img, 'HeadPose_Drowsiness!', (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
+        ring_alarm()
 
     return img
 
