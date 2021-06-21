@@ -1,3 +1,4 @@
+import time
 import timeit
 from threading import Thread
 
@@ -8,14 +9,29 @@ from ear import calculate_ear
 from head_pose import calculate_head_pose
 from preprocess import preprocess
 
+EAR_DROWSY_START = 0
+EAR_DROWSY_TIME_THRESH = 0.7
+EAR = 0
 EAR_DROWSY_FLAG = False
-EAR_DROWSY_RATIO = 0.5
-EAR_MAX = 0
-EAR_MIN = 10
 EAR_THRESH = 0
-NOW = 0
-START = 0
-TIME_THRESH = 0.7
+
+def getEARTHRESHWithThread() :
+    global EAR
+
+    time.sleep(2)
+    print("Init getAverageEar")
+
+    ear_list = []
+    # for _ in range(15):
+    for _ in range(10):
+        ear_list.append(EAR)
+        time.sleep(1)
+
+    global EAR_THRESH
+    EAR_THRESH = (sum(ear_list) / len(ear_list)) - .01
+
+    print("EAR_THRESH={:.4F}".format(EAR_THRESH))
+    print("Finish getEARWithOpenEyes")
 
 # 프로그램 진입점
 if __name__ == "__main__":
@@ -26,6 +42,11 @@ if __name__ == "__main__":
     # src = "VideoSample3.mp4"
 
     cap = cv2.VideoCapture(0)
+
+    # EAR_THRESH 계산 쓰레드
+    get_Average_ear = Thread(target=getEARTHRESHWithThread)
+    get_Average_ear.daemon = True
+    get_Average_ear.start()
 
     prev = timeit.default_timer() - 1
     while(cap.isOpened()):
@@ -47,23 +68,15 @@ if __name__ == "__main__":
         headPose = calculate_head_pose(rgb, bgr)
 
         # EAR 계산
-        ear = calculate_ear(rgb, draw=bgr)
-        if ear is not None:
-            # EAR 최솟값과 최댓값 사이의 값을 임계값으로 지정
-            if ear > EAR_MAX:
-                EAR_MAX = ear
-            if ear < EAR_MIN:
-                EAR_MIN = ear
-            EAR_THRESH = EAR_DROWSY_RATIO * EAR_MAX + (1 - EAR_DROWSY_RATIO) * EAR_MIN
-
-            # `ear`이 `EAR_THRESH`보다 `TIME_THRESH` 초 이상 낮으면 졸음으로 판단
-            if ear < EAR_THRESH:
+        EAR = calculate_ear(rgb, draw=bgr)
+        if EAR is not None:
+             # `ear`이 `EAR_THRESH`보다 `TIME_THRESH` 초 이상 낮으면 졸음으로 판단
+            if EAR < EAR_THRESH:
                 if not EAR_DROWSY_FLAG:
-                    START = timeit.default_timer()
+                    EAR_DROWSY_START = timeit.default_timer()
                     EAR_DROWSY_FLAG = True
 
-                NOW = timeit.default_timer()
-                if (NOW - START) > TIME_THRESH:
+                if (timeit.default_timer() - EAR_DROWSY_START) > EAR_DROWSY_TIME_THRESH:
                     cv2.putText(bgr, 'EAR_Drowsiness!', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
                     #print('drowsiness...')
                     ring_alarm()
