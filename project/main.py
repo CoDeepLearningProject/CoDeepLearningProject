@@ -44,7 +44,7 @@ if __name__ == "__main__":
         L, gray, rgb, bgr = preprocess(frame)
 
         # head pose 계산
-        # headPose = calculate_head_pose(rgb, bgr)
+        headPose = calculate_head_pose(rgb, bgr)
 
         # EAR 계산
         ear = calculate_ear(rgb, draw=bgr)
